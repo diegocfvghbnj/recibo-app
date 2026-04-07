@@ -19,7 +19,6 @@ def crear_pdf(datos_json):
     items = datos_json.get("productos", [])
 
     ahora = datetime.now().strftime("%Y%m%d_%H%M%S")
-    archivo_pdf = f"Recibo_{cliente.replace(' ', '_')}_{ahora}.pdf"
     
     elementos = []
     styles = getSampleStyleSheet()
@@ -78,9 +77,14 @@ def crear_pdf(datos_json):
     elementos.append(Spacer(1, 20))
     elementos.append(Paragraph(f"TOTAL A PAGAR: ${total_general:,.2f}", styles['Heading2']))
 
-    doc = SimpleDocTemplate(archivo_pdf, pagesize=letter)
+    from io import BytesIO
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
     doc.build(elementos)
-    return archivo_pdf
+
+    buffer.seek(0)
+    return buffer
 
 @app.route('/generar-recibo', methods=['POST'])
 def api_generar_recibo():
@@ -90,9 +94,15 @@ def api_generar_recibo():
             return jsonify({"error": "No se recibieron datos"}), 400
             
         print(f"Datos recibidos: {data}")
-        nombre_archivo = crear_pdf(data)
         
-        return send_file(nombre_archivo, as_attachment=True)
+        pdf_buffer = crear_pdf(data)
+
+        return send_file(
+            pdf_buffer,
+            as_attachment=True,
+            download_name="recibo.pdf",
+            mimetype='application/pdf'
+        )
     
     except Exception as e:
         print(f"❌ ERROR: {e}")
