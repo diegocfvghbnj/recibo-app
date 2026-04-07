@@ -1,24 +1,26 @@
 from flask import Flask, request, send_file, jsonify
-from flask_cors import CORS 
+from flask_cors import CORS  # <--- NUEVO: Importar CORS
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Image, Paragraph, Spacer
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from datetime import datetime
 import os
-import io  # <--- NUEVO: Para manejar el PDF en memoria RAM
 
 # Importamos tu diccionario de productos
 from productos import productos 
 
 app = Flask(__name__)
-CORS(app) 
+CORS(app) # <--- NUEVO: Activar CORS para que tu web pueda enviar datos
 
 def crear_pdf(datos_json):
     cliente = datos_json.get("cliente", "Consumidor Final")
     descuento_input = str(datos_json.get("descuento", "0"))
     items = datos_json.get("productos", [])
 
+    ahora = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archivo_pdf = f"Recibo_{cliente.replace(' ', '_')}_{ahora}.pdf"
+    
     elementos = []
     styles = getSampleStyleSheet()
     
@@ -76,13 +78,9 @@ def crear_pdf(datos_json):
     elementos.append(Spacer(1, 20))
     elementos.append(Paragraph(f"TOTAL A PAGAR: ${total_general:,.2f}", styles['Heading2']))
 
-    # MODIFICACIÓN: Crear el PDF en un buffer de memoria
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    doc = SimpleDocTemplate(archivo_pdf, pagesize=letter)
     doc.build(elementos)
-    
-    buffer.seek(0) # Volver al inicio del buffer para que Flask pueda leerlo
-    return buffer
+    return archivo_pdf
 
 @app.route('/generar-recibo', methods=['POST'])
 def api_generar_recibo():
@@ -92,22 +90,15 @@ def api_generar_recibo():
             return jsonify({"error": "No se recibieron datos"}), 400
             
         print(f"Datos recibidos: {data}")
-        cliente = data.get("cliente", "Pedido").replace(' ', '_')
+        nombre_archivo = crear_pdf(data)
         
-        # Obtenemos el buffer en lugar del nombre del archivo
-        pdf_buffer = crear_pdf(data)
-        
-        return send_file(
-            pdf_buffer, 
-            as_attachment=True, 
-            download_name=f"Recibo_{cliente}.pdf",
-            mimetype='application/pdf'
-        )
+        return send_file(nombre_archivo, as_attachment=True)
     
     except Exception as e:
         print(f"❌ ERROR: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    # IMPORTANTE: Render usa el puerto que él decide, usualmente 10000 o 5000
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
